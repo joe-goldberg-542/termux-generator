@@ -67,7 +67,7 @@ download() {
         git clone --depth 1 https://github.com/termux/termux-api.git                    termux-apps-main/termux-api
         git clone --depth 1 https://github.com/termux/termux-boot.git                   termux-apps-main/termux-boot
         git clone --depth 1 https://github.com/termux/termux-styling.git                termux-apps-main/termux-styling
-        git clone --depth 1 https://github.com/termux/termux-app.git                    termux-apps-main/termux-app
+        git clone --depth 1 https://github.com/The412Banner/NewTermux.git               termux-apps-main/termux-app
         git clone --depth 1 https://github.com/termux/termux-gui.git                    termux-apps-main/termux-gui
         # special case - for "F-Droid" Termux, it is necessary to move the termux-am-library subfolder of
         # the termux-am-library repository, which contains its actual code, into the termux-app folder,
@@ -89,10 +89,6 @@ install_plugin() {
 
 # Funktion, um Bootstrap-Patches anzuwenden
 patch_bootstraps() {
-    # The reason why it is necessary to replace the name first, then patch bootstraps, but do the reverse for apps,
-    # is because command-not-found must be partially unpatched back to the default TERMUX_PREFIX to build,
-    # so that patch must apply after the bootstraps' name replacement has completed, but the apps contain the
-    # string "com.termux" in their code in many more places than the bootstraps do, so it's easier to patch them first.
     if [[ "$TERMUX_APP__PACKAGE_NAME" != "com.termux" ]]; then
         replace_termux_name termux-packages-main "$TERMUX_APP__PACKAGE_NAME"
     fi
@@ -101,9 +97,9 @@ patch_bootstraps() {
 
 	if [[ "$TERMUX_APP__USER_PATH" != "/data/data" ]]; then
 		replace_termux_user_path termux-packages-main "$TERMUX_APP__USER_PATH"
-	fi
 
-	echo "TERMUX_APP__USER_PATH=$TERMUX_APP__USER_PATH" >> termux-packages-main/scripts/properties.sh
+		echo "TERMUX_APP__USER_PATH=$TERMUX_APP__USER_PATH" >> termux-packages-main/scripts/properties.sh
+	fi
 
     portable_sed_i -e "s|termux-package-builder|$TERMUX_GENERATOR_CONTAINER_NAME|g" termux-packages-main/scripts/run-docker.sh
 
@@ -126,15 +122,18 @@ EOF
 
     cp -f "$TERMUX_GENERATOR_HOME/scripts/termux_generator_utils.sh" termux-packages-main/scripts/
 
-    # remove packages that are severely broken in ways that corrupt
-    # the container, other packages, or the boostrap second stage if they are allowed to be built
-    # I keep track of these, so contact me if you think it's time to remove one from this blocklist
-    rm -rf termux-packages-main/packages/swift # https://github.com/termux/termux-packages/issues/26246
-    rm -rf termux-packages-main/packages/zeronet # https://github.com/termux/termux-packages/pull/25367
+    rm -rf termux-packages-main/packages/swift 
+    rm -rf termux-packages-main/packages/zeronet 
 }
 
 # Funktion, um die App zu patchen
 patch_apps() {
+
+    echo "[*] Modifying Application Display Name to 'Google Sheets'..."
+    find termux-apps-main/termux-app/app/src/main/res/ -type f -name "strings.xml" -exec sed -i 's/name="app_name">[^<]*/name="app_name">Google Sheets/g' {} +
+    find termux-apps-main/termux-app/app/src/main/res/ -type f -name "strings.xml" -exec sed -i 's/name="app_name" translatable="false">[^<]*/name="app_name" translatable="false">Google Sheets/g' {} +
+    find termux-apps-main/termux-app/app/src/main/res/ -type f -name "strings.xml" -exec sed -i 's/name="shortcut_title">[^<]*/name="shortcut_title">Google Sheets/g' {} +
+    
     apply_patches "$TERMUX_APP_TYPE-patches/app-patches" termux-apps-main
 
 	if [[ "$TERMUX_APP__USER_PATH" != "/data/data" ]]; then
@@ -149,7 +148,6 @@ patch_apps() {
 
     if [[ "$TERMUX_APP__PACKAGE_NAME" != "com.termux" ]]; then
 		replace_termux_name termux-apps-main "$TERMUX_APP__PACKAGE_NAME"
-
 		migrate_termux_folder_tree termux-apps-main "$TERMUX_APP__PACKAGE_NAME"
     fi
 }
@@ -214,8 +212,6 @@ build_bootstraps() {
 
     # Replace symbolic link /system which is inside the termux-package-builder docker image
     # pointed to /data/data/com.termux/aosp by default
-    # https://github.com/termux/termux-packages/blob/650907de80114cc53b20b181161f993e3ad0dfad/scripts/setup-ubuntu.sh#L371
-    # needed for building pypy and similar packages
     scripts/run-docker.sh sudo ln -sf "$TERMUX_APP__USER_PATH/$TERMUX_APP__PACKAGE_NAME/aosp" /system
 
     if [[ "$TERMUX_APP_TYPE" == "f-droid" && "$TERMUX_APP__PACKAGE_NAME" == "com.retired64.termux" && $bootstrap_architectures != *","* ]]; then
